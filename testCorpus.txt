@@ -1,0 +1,7 @@
+<text
+
+This is a simple &quot;test&quot; of &lt;html&gt; entities
+
+
+
+</text
