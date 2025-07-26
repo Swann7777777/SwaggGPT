@@ -1,7 +1,7 @@
 # SwaggTransformer
 
 
-##WORK IN PROGRESS
+## WORK IN PROGRESS
 
 
 **Swagg transformer** is a open source transformer project made for learning purposes.
