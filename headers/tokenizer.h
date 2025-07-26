@@ -21,7 +21,7 @@ public:
 	class trieNode {
 	public:
 
-		trieNode* children[26];
+		trieNode* children[26]{};
 
 		int index;
 
@@ -29,8 +29,8 @@ public:
 
 			index = -1;
 
-			for (int i = 0; i < 26; i++) {
-				children[i] = nullptr;
+			for (auto & i : children) {
+				i = nullptr;
 			}
 		}
 	};
@@ -47,9 +47,7 @@ public:
 	};
 
 
-
-
-	std::vector<std::string> loadVocabulary() {
+	static std::vector<std::string> loadVocabulary() {
 
 		std::ifstream vocabularyFileIn("../output/vocabulary.txt");
 
@@ -67,29 +65,24 @@ public:
 	}
 
 
-
-
-
-
-
-	void buildTrie(const std::vector<std::string> &vocabulary, trieNode* root) {
+	static void buildTrie(const std::vector<std::string> &vocabulary, trieNode* root) {
 
 		for (int i = 0; i < vocabulary.size(); i++) {
 
 			trieNode* node = root;
 
-			for (int j = 0; j < vocabulary[i].size(); j++) {
+			for (const char j : vocabulary[i]) {
 
-				if (node->children[vocabulary[i][j] - 'a'] == nullptr) {
+				if (node->children[j - 'a'] == nullptr) {
 
 
 					const auto newNode = new trieNode();
 
-					node->children[vocabulary[i][j] - 'a'] = newNode;
+					node->children[j - 'a'] = newNode;
 
 				}
 
-				node = node->children[vocabulary[i][j] - 'a'];
+				node = node->children[j - 'a'];
 
 			}
 
@@ -98,8 +91,7 @@ public:
 	}
 
 
-
-	void stripTagsAndTemplates(std::string &line) {
+	static void stripTagsAndTemplates(std::string &line) {
 		std::string result;
 		bool inTag = false;
 		bool inTemplate = false;
@@ -132,8 +124,7 @@ public:
 	}
 
 
-
-	bool loadCorpus(std::ifstream &corpusStream, std::string &corpusString) {
+	static bool loadCorpus(std::ifstream &corpusStream, std::string &corpusString) {
 
 		corpusString.reserve(20000);
 
@@ -190,11 +181,7 @@ public:
 	}
 
 
-
-
-
-
-	std::vector<std::string> normalizeCorpus(std::string &corpusString) {
+	static std::vector<std::string> normalizeCorpus(std::string &corpusString) {
 
 		std::unordered_map<std::string, char> specialChar = {
 			{"\xC3\xA9", 'e'}, {"\xC3\xA0", 'a'}, {"\xC3\xA8", 'e'}, {"\xC3\xB9", 'u'},
@@ -261,16 +248,7 @@ public:
 	}
 
 
-
-
-
-
-
-
-
-
-
-	std::vector<std::vector<int>> tokenizeCorpus(const std::vector<std::string> &words, const trieNode* root) {
+	static std::vector<std::vector<int>> tokenizeCorpus(const std::vector<std::string> &words, const trieNode* root) {
 
 		std::vector<std::vector<int>> tokenizedWords(words.size());
 
@@ -313,9 +291,7 @@ public:
 	}
 
 
-
-
-	std::vector<std::pair<int, int>> createPairs(const std::vector<std::vector<int>> &tokenizedWords) {
+	static std::vector<std::pair<int, int>> createPairs(const std::vector<std::vector<int>> &tokenizedWords) {
 
 		std::vector<std::pair<int, int>> pairs;
 
@@ -338,11 +314,7 @@ public:
 	}
 
 
-
-
-
-
-	void calculateFrequencies(const std::vector<std::pair<int, int>> &pairs, std::unordered_map<std::pair<int, int>, int, pair_hash> &frequencies) {
+	static void calculateFrequencies(const std::vector<std::pair<int, int>> &pairs, std::unordered_map<std::pair<int, int>, int, pair_hash> &frequencies) {
 
 		for (auto& i : pairs) {
 			frequencies[i]++;
@@ -351,13 +323,7 @@ public:
 	}
 
 
-
-
-
-
-
-
-	std::vector<std::pair<std::pair<int, int>, int>> orderFrequencies(const std::unordered_map<std::pair<int, int>, int, pair_hash> &frequencies) {
+	static std::vector<std::pair<std::pair<int, int>, int>> orderFrequencies(const std::unordered_map<std::pair<int, int>, int, pair_hash> &frequencies) {
 
 		std::vector<std::pair<std::pair<int, int>, int>> orderedFrequencies;
 
@@ -381,22 +347,15 @@ public:
 
 
 
-		std::partial_sort(orderedFrequencies.begin(),
-					  orderedFrequencies.begin() + 1,
-					  orderedFrequencies.end(),
-					  comp);
+		std::ranges::partial_sort(orderedFrequencies, orderedFrequencies.begin() + 1,
+		                          comp);
 
 
 		return orderedFrequencies;
 	}
 
 
-
-
-
-
-
-	void outputPair(const std::vector<std::string> &vocabulary, const std::vector<std::pair<std::pair<int, int>, int>> &orderedFrequencies) {
+	static void outputPair(const std::vector<std::string> &vocabulary, const std::vector<std::pair<std::pair<int, int>, int>> &orderedFrequencies) {
 
 		std::ofstream vocabularyFileOut("../output/vocabulary.txt", std::ios::app);
 
@@ -406,11 +365,7 @@ public:
 	}
 
 
-
-
-
-
-	void deleteTrie(trieNode *node) {
+	static void deleteTrie(trieNode *node) {
 
 		if (!node) {
 			return;
@@ -427,7 +382,7 @@ public:
 
 
 
-	void tokenize() {
+	void tokenize() const {
 
 		for (int v = 0; v < 1000; v++) {
 

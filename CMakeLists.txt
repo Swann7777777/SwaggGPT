@@ -3,6 +3,9 @@ project(SwaggTransformer)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(SwaggTransformer source/main.cpp
+include_directories(headers)
+
+add_executable(SwaggTransformer
+        headers/embedding.h
         headers/tokenizer.h
-        headers/embedding.h)
+        source/main.cpp)
