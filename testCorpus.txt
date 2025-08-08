@@ -1,7 +1,45 @@
 <text
 
-This is a simple &quot;test&quot; of &lt;html&gt; entities
 
+
+🧠 What is gcc?
+
+gcc stands for GNU Compiler Collection. Despite the name, it's not just for C — it’s a whole suite of compilers for different languages.
+
+Here’s what it includes:
+Command	Language it compiles
+gcc	C
+g++	C++
+gfortran	Fortran
+gcj	Java (deprecated)
+go	Go (not the same as Google's Go)
+🧩 So why are there both gcc and g++?
+
+They’re actually different frontends to the same backend compiler system. The difference is how they treat the input code and which libraries they link by default:
+
+    gcc is for compiling C code.
+
+    g++ is for compiling C++ code:
+
+        It enables C++ features (like classes, templates, etc.).
+
+        It automatically links against the C++ standard library (libstdc++).
+
+        It treats .cpp files appropriately.
+
+    You can compile C++ code with gcc, but you'll run into issues unless you explicitly tell it to use C++ mode and link C++ libraries manually. That’s why g++ exists — it handles this automatically.
+
+🔧 TL;DR
+
+    gcc = base C compiler in the GNU Compiler Collection
+
+    g++ = C++ compiler in the same collection
+
+    They both invoke the same underlying toolchain, but behave differently
+
+So if you're writing C++ code (which you are), use g++, and make sure CLion is set up to use that for the C++ compiler.
+
+Let me know if you want to see an example of how gcc and g++ behave differently with the same .cpp file
 
 
 </text

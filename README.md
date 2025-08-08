@@ -1,13 +1,31 @@
 # SwaggTransformer
 
 
-## WORK IN PROGRESS
+## Overview
+
+_**Swagg transformer**_ is a simple transformer project.
+It was maid only for **learning purposes** and has no other interest whatsoever.
+The rules were to create a transformer **from scratch** with no external libraries nor pre-trained weights, embeddings or vocabulary.
+It is still a **work in progress** !
 
 
-**Swagg transformer** is a open source transformer project made for learning purposes.
-It is made by a 16 years old so it probably looks like dogshit so if someone sees this, don't hesitate to give me feedback !
+## Features
+
+This project features :
+
+- BPE (Byte Pair Encoding) tokenizer
+- Skip-Gram (Word2Vec) model for word embeddings
+
+This project will feature :
+
+- Feed forward neural network
+- Attention mechanism
 
 
-## Run
+## Build and run
 
-Don't.
+### Requirements
+
+- GCC
+- C++ 20
+- CMake >= 3.31

@@ -403,8 +403,8 @@ public:
 
 
 
-			std::ifstream corpusStream("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
-			//std::ifstream corpusStream("/home/swann7777777/CLionProjects/SwaggTransformer/testCorpus.txt");
+			//std::ifstream corpusStream("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
+			std::ifstream corpusStream("/home/swann7777777/CLionProjects/SwaggTransformer/testCorpus.txt");
 
 
 
