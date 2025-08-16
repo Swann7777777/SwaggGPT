@@ -61,11 +61,12 @@ public:
 
     static void buildTrie(trieNode* &root, const std::vector<std::string> &vocabulary) {
 
-        trieNode* node = root;
 
         int index = 0;
 
         for (const auto& word : vocabulary) {
+
+            trieNode* node = root;
 
             for (const auto& c : word) {
 
@@ -139,6 +140,8 @@ public:
             {"&apos;", '\''}
         };
 
+        std::regex url("url=.+?;");
+
         std::stringstream word;
 
         bool stop = false;
@@ -171,9 +174,25 @@ public:
 
                         if (line[0] != '[' && line[0] != '!' && line[0] != '|') {
 
+                            line = std::regex_replace(line, url, "");
+
                             for (int i = 0; i < line.size(); i++) {
 
-                                const unsigned char c = line[i];
+                                unsigned char c = line[i];
+
+                                if (c == '[') {
+                                    i++;
+                                    c = line[i];
+                                    if (c == '[') {
+                                        continue;
+                                    }
+
+                                    while (c != ']' && i + 1 < line.size()) {
+                                        i++;
+                                        c = line[i];
+                                    }
+
+                                }
 
                                 if (c >= 0xC3 && i + 1 < line.size()) {
                                     if (std::string utf8Char = line.substr(i, 2); specialChar.contains(utf8Char)) {
@@ -233,21 +252,37 @@ public:
 
             std::vector<int> tempTokens;
 
-            for (const auto& c : word) {
-                if (node->children[c - 'a'] == nullptr) {
+            int index = 0;
 
-                    tempTokens.emplace_back(node->index);
+            int token = -1;
+
+            for (int i = 0; i < word.size();) {
+
+                if (node->children[word[i] - 'a'] != nullptr) {
+
+                    node = node->children[word[i] - 'a'];
+
+                    if (node->index != -1) {
+                        token = node->index;
+                        index = i;
+                    }
+
+                    i++;
                 }
 
                 else {
-
-                    node = node->children[c - 'a'];
+                    tempTokens.push_back(token);
+                    i = index + 1;
+                    node = root;
                 }
             }
 
-            tokenizedWords[tempTokens]++;
+            tempTokens.push_back(token);
+
+            tokenizedWords[tempTokens] = count;
         }
     }
+
 
 
     static void tokenize() {
@@ -275,11 +310,15 @@ public:
 
         tokenizeWords(words, tokenizedWords, root);
 
-        for (const auto&[fst, snd] : words) {
-            std::cout << fst << " : " << snd << "\n";
+
+        for (const auto&[fst, snd] : tokenizedWords) {
+            for (const auto& i : fst) {
+                std::cout << vocabulary[i] << " ";
+            }
+            std::cout << ": " << snd << "\n";
         }
 
-        std::cout << words.size();
+        std::cout << tokenizedWords.size();
 
 
 

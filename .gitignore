@@ -1,2 +1,5 @@
 /.env
 /.idea
+/testCorpus.txt
+output/testVocabulary.txt
+headers/old_tokenizer.h
