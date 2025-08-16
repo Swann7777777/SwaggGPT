@@ -1,6 +1,5 @@
-#ifndef TOKENIZER_H
-#define TOKENIZER_H
-
+#ifndef SWAGGGPT_TOKENIZERS_H
+#define SWAGGGPT_TOKENIZERS_H
 
 #include <iostream>
 #include <fstream>
@@ -15,488 +14,294 @@
 #include <string_view>
 #include <regex>
 
+
 class tokenizer {
 public:
 
-	class trieNode {
-	public:
+    class trieNode {
+    public:
 
-		trieNode* children[26]{};
+        trieNode* children[26]{};
 
-		int index;
+        int index;
 
-		trieNode() {
+        trieNode() {
 
-			index = -1;
+            index = -1;
 
-			for (auto & i : children) {
-				i = nullptr;
-			}
-		}
-	};
+            for (auto & i : children) {
+                i = nullptr;
+            }
+        }
+    };
 
 
 
+    struct pairHash {
 
+        std::size_t operator()(const std::pair<int, int>& p) const {
 
-	struct pair_hash {
+            return static_cast<std::size_t>(p.first) * 31 + p.second;
+        }
+    };
 
-		std::size_t operator()(const std::pair<int, int>& p) const {
-			return static_cast<std::size_t>(p.first) * 31 + p.second;
-		}
-	};
+    struct vectorHash {
+        std::size_t operator()(const std::vector<int> &v) const {
 
+            std::size_t seed = v.size();
 
-	static std::vector<std::string> loadVocabulary() {
+            for(auto& i : v) {
+                seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
 
-		std::ifstream vocabularyFileIn("../output/vocabulary.txt");
+            return seed;
+        }
+    };
 
-		std::vector<std::string> vocabulary;
 
-		vocabulary.reserve(10000);
+    static void buildTrie(trieNode* &root, const std::vector<std::string> &vocabulary) {
 
-		std::string line;
+        trieNode* node = root;
 
-		while (std::getline(vocabularyFileIn, line)) {
-			vocabulary.push_back(line);
-		}
+        int index = 0;
 
-		return vocabulary;
-	}
+        for (const auto& word : vocabulary) {
 
+            for (const auto& c : word) {
 
-	static void buildTrie(const std::vector<std::string> &vocabulary, trieNode* root) {
+                if (node->children[c - 'a'] == nullptr) {
 
-		for (int i = 0; i < vocabulary.size(); i++) {
+                    node->children[c - 'a'] = new trieNode();
+                }
 
-			trieNode* node = root;
+                node = node->children[c - 'a'];
+            }
 
-			for (const char j : vocabulary[i]) {
+            node->index = index;
 
-				if (node->children[j - 'a'] == nullptr) {
+            index++;
+        }
 
+    }
 
-					const auto newNode = new trieNode();
 
-					node->children[j - 'a'] = newNode;
+    static void loadVocabulary(std::vector<std::string> &vocabulary) {
 
-				}
+        std::ifstream vocabularyFileIn("../output/vocabulary.txt");
 
-				node = node->children[j - 'a'];
+        vocabulary.reserve(10000);
 
-			}
+        std::string line;
 
-			node->index = i;
-		}
-	}
+        while (std::getline(vocabularyFileIn, line)) {
+            vocabulary.push_back(line);
+        }
+    }
 
 
-	static void stripTagsAndTemplates(std::string &line) {
-		std::string result;
-		bool inTag = false;
-		bool inTemplate = false;
+    static void insertTrie(const std::string &key, trieNode* &root, const int &index) {
 
-		for (size_t i = 0; i < line.size(); ++i) {
-			if (!inTag && !inTemplate && line[i] == '<') {
-				inTag = true;
-				continue;
-			}
-			if (inTag && line[i] == '>') {
-				inTag = false;
-				continue;
-			}
-			if (!inTag && !inTemplate && line[i] == '{' && i + 1 < line.size() && line[i+1] == '{') {
-				inTemplate = true;
-				++i;
-				continue;
-			}
-			if (inTemplate && line[i] == '}' && i + 1 < line.size() && line[i+1] == '}') {
-				inTemplate = false;
-				++i;
-				continue;
-			}
-			if (!inTag && !inTemplate) {
-				result += line[i];
-			}
-		}
+        trieNode* node = root;
 
-		line = std::move(result);
-	}
+        for (const char i : key) {
 
+            if (node->children[i - 'a'] == nullptr) {
 
-	static bool loadCorpus(std::ifstream &corpusStream, std::string &corpusString) {
+                const auto newNode = new trieNode();
 
-		corpusString.reserve(20000);
+                node->children[i - 'a'] = newNode;
+            }
 
+            node = node->children[i - 'a'];
+        }
 
-		corpusString = "";
+        node->index = index;
+    }
 
-		std::string line;
 
 
+    static void loadWords(std::unordered_map<std::string, int> &words) {
 
-		bool match = false;
+        //std::ifstream corpusFile("../testCorpus.txt");
+        std::ifstream corpusFile("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
 
 
-		while (!match) {
+        std::string line;
 
+        std::unordered_map<std::string, char> specialChar = {
+            {"\xC3\xA9", 'e'}, {"\xC3\xA0", 'a'}, {"\xC3\xA8", 'e'}, {"\xC3\xB9", 'u'},
+            {"\xC3\xAA", 'e'}, {"\xC3\xA2", 'a'}, {"\xC3\xA7", 'c'}, {"\xC3\xB4", 'o'},
+            {"\xC3\xAE", 'i'}, {"\xC3\xAF", 'i'}, {"\xC3\xBB", 'u'}
+        };
 
-			if (!std::getline(corpusStream, line)) {
-				return false;
-			}
+        std::unordered_map<std::string_view, char> htmlEntities = {
+            {"&quot;", '"'}, {"&lt;", '<'}, {"&gt;", '>'}, {"&amp;", '&'},
+            {"&apos;", '\''}
+        };
 
+        std::stringstream word;
 
-			if (int pos = line.find("<text"); pos != std::string::npos) {
+        bool stop = false;
 
-				while (!match) {
+        while (!stop) {
 
+            bool match = false;
 
-					if (!std::getline(corpusStream, line)) {
-						return false;
-					}
+            while (!match) {
 
+                if (!getline(corpusFile, line)) {
+                    stop = true;
+                    break;
+                }
 
-					pos = line.find("</text");
+                if (line.find("<text") != std::string::npos && line.find("</text") == std::string::npos) {
 
-					if (pos != std::string::npos) {
-						match = true;
-					}
+                    while (!match) {
 
-					else {
-						if (line[0] != '[' && line[0] != '!' && line[0] != '|') {
+                        if (!getline(corpusFile, line)) {
+                            stop = true;
+                            break;
+                        }
 
+                        if (line.find("</text") != std::string::npos) {
 
-							stripTagsAndTemplates(line);
+                            match = true;
+                            break;
+                        }
 
+                        if (line[0] != '[' && line[0] != '!' && line[0] != '|') {
 
-							corpusString += line + " ";
-						}
-					}
-				}
-			}
-		}
+                            for (int i = 0; i < line.size(); i++) {
 
-		return true;
+                                const unsigned char c = line[i];
 
-	}
+                                if (c >= 0xC3 && i + 1 < line.size()) {
+                                    if (std::string utf8Char = line.substr(i, 2); specialChar.contains(utf8Char)) {
 
+                                        word << specialChar[utf8Char];
+                                    }
 
-	static std::vector<std::string> normalizeCorpus(std::string &corpusString) {
+                                    i += 2;
+                                }
 
-		std::unordered_map<std::string, char> specialChar = {
-			{"\xC3\xA9", 'e'}, {"\xC3\xA0", 'a'}, {"\xC3\xA8", 'e'}, {"\xC3\xB9", 'u'},
-			{"\xC3\xAA", 'e'}, {"\xC3\xA2", 'a'}, {"\xC3\xA7", 'c'}, {"\xC3\xB4", 'o'},
-			{"\xC3\xAE", 'i'}, {"\xC3\xAF", 'i'}, {"\xC3\xBB", 'u'}
-		};
+                                if (c == '&') {
+                                    for (auto& [entity, ch] : htmlEntities) {
 
-		std::unordered_map<std::string_view, char> htmlEntities = {
-			{"&quot;", '"'}, {"&lt;", '<'}, {"&gt;", '>'}, {"&amp;", '&'},
-			{"&apos;", '\''}
-		};
+                                        if (i + entity.length() <= line.size() && line.compare(i, entity.length(), entity) == 0) {
 
+                                            line.replace(i, entity.length(), std::string(1, ch));
 
-		std::vector<std::string> words;
-		words.reserve(4000);
+                                            i += entity.length();
 
-		std::stringstream word;
-		for (size_t i = 0; i < corpusString.size();) {
-			const unsigned char c = corpusString[i];
+                                            break;
+                                        }
+                                    }
+                                }
 
-			if (c >= 0xC3 && i + 1 < corpusString.size()) {
-				if (std::string utf8Char = corpusString.substr(i, 2); specialChar.contains(utf8Char)) {
-					word << specialChar[utf8Char];
-				}
-				i += 2;
-				continue;
-			}
+                                if (std::isalpha(c)) {
 
+                                    word << static_cast<char>(std::tolower(c));
+                                }
 
-			if (c == '&') {
-				for (auto& [entity, ch] : htmlEntities) {
-					if (i + entity.length() <= corpusString.size() && corpusString.compare(i, entity.length(), entity) == 0) {
+                                else {
+                                    if (!word.str().empty()) {
+                                        words[word.str()]++;
+                                        word.str("");
+                                        word.clear();
 
-						corpusString.replace(i, entity.length(), std::string(1, ch));
+                                    }
+                                }
+                            }
+                            if (!word.str().empty()) {
+                                words[word.str()]++;
+                                word.str("");
+                                word.clear();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-						i += entity.length();
-						break;
-					}
-				}
-			}
 
+    static void tokenizeWords(const std::unordered_map<std::string, int> &words, std::unordered_map<std::vector<int>, int, vectorHash> &tokenizedWords, const trieNode* root) {
 
+        for (const auto& [word, count] : words) {
 
+            const trieNode* node = root;
 
+            std::vector<int> tempTokens;
 
-			if (std::isalpha(c)) {
-				word << static_cast<char>(std::tolower(c));
-			} else {
-				if (!word.str().empty()) {
-					words.push_back(word.str());
-					word.str("");
-					word.clear();
-				}
-			}
+            for (const auto& c : word) {
+                if (node->children[c - 'a'] == nullptr) {
 
-			i++;
-		}
+                    tempTokens.emplace_back(node->index);
+                }
 
-		if (!word.str().empty()) {
-			words.push_back(word.str());
-		}
+                else {
 
-		return words;
-	}
+                    node = node->children[c - 'a'];
+                }
+            }
 
+            tokenizedWords[tempTokens]++;
+        }
+    }
 
-	static std::vector<std::vector<int>> tokenizeCorpus(const std::vector<std::string> &words, const trieNode* root) {
 
-		std::vector<std::vector<int>> tokenizedWords(words.size());
+    static void tokenize() {
 
-		tokenizedWords.reserve(words.size());
+        std::vector<std::string> vocabulary;
 
+        vocabulary.reserve(30000);
 
 
-		for (int i = 0; i < words.size(); i++) {
+        loadVocabulary(vocabulary);
 
-			const trieNode* node = root;
+        auto *root = new trieNode();
 
-			int token = -1;
-			int index = 0;
+        buildTrie(root, vocabulary);
 
-			for (int j = 0; j < words[i].size();) {
+        std::unordered_map<std::string, int> words;
 
-				if (node->children[words[i][j] - 'a'] != nullptr) {
+        words.reserve(10000);
 
-					node = node->children[words[i][j] - 'a'];
+        loadWords(words);
 
-					if (node->index != -1) {
-						token = node->index;
-						index = j;
-					}
+        std::unordered_map<std::vector<int>, int, vectorHash> tokenizedWords;
 
-					j++;
-				}
+        tokenizedWords.reserve(words.size());
 
-				else {
-					tokenizedWords[i].push_back(token);
-					j = index + 1;
-					node = root;
-				}
-			}
+        tokenizeWords(words, tokenizedWords, root);
 
-			tokenizedWords[i].push_back(token);
-		}
+        for (const auto&[fst, snd] : words) {
+            std::cout << fst << " : " << snd << "\n";
+        }
 
-		return tokenizedWords;
-	}
+        std::cout << words.size();
 
 
-	static std::vector<std::pair<int, int>> createPairs(const std::vector<std::vector<int>> &tokenizedWords) {
 
-		std::vector<std::pair<int, int>> pairs;
 
 
-		pairs.reserve(tokenizedWords.size());
 
 
-		for (const auto& i : tokenizedWords) {
 
-			if (i.size() > 1) {
+    }
 
-				for (int j = 0; j < i.size() - 1; j++) {
 
-					pairs.emplace_back(i[j], i[j + 1] );
-				}
-			}
-		}
-
-		return pairs;
-	}
-
-
-	static void calculateFrequencies(const std::vector<std::pair<int, int>> &pairs, std::unordered_map<std::pair<int, int>, int, pair_hash> &frequencies) {
-
-		for (auto& i : pairs) {
-			frequencies[i]++;
-		}
-
-	}
-
-
-	static std::vector<std::pair<std::pair<int, int>, int>> orderFrequencies(const std::unordered_map<std::pair<int, int>, int, pair_hash> &frequencies) {
-
-		std::vector<std::pair<std::pair<int, int>, int>> orderedFrequencies;
-
-		orderedFrequencies.reserve(frequencies.size());
-
-
-
-		for (const auto&[fst, snd] : frequencies) {
-			std::pair<std::pair<int, int>, int> pair;
-			pair.first = fst;
-			pair.second = snd;
-			orderedFrequencies.push_back(pair);
-
-		}
-
-
-		auto comp = [](const std::pair<std::pair<int, int>, int> &a, const std::pair<std::pair<int, int>, int> &b) {
-
-			return a.second > b.second;
-		};
-
-
-
-		std::ranges::partial_sort(orderedFrequencies, orderedFrequencies.begin() + 1,
-		                          comp);
-
-
-		return orderedFrequencies;
-	}
-
-
-	static void outputPair(const std::vector<std::string> &vocabulary, const std::vector<std::pair<std::pair<int, int>, int>> &orderedFrequencies) {
-
-		std::ofstream vocabularyFileOut("../output/vocabulary.txt", std::ios::app);
-
-
-		vocabularyFileOut << "\n" << vocabulary[orderedFrequencies[0].first.first] + vocabulary[orderedFrequencies[0].first.second];
-
-	}
-
-
-	static void deleteTrie(trieNode *node) {
-
-		if (!node) {
-			return;
-		}
-
-		for (const auto & i : node->children) {
-			deleteTrie(i);
-		}
-
-		delete node;
-	}
-
-
-
-
-
-	void tokenize() const {
-
-		for (int v = 0; v < 1000; v++) {
-
-			auto runStart = std::chrono::high_resolution_clock::now();
-
-
-			std::vector<std::string> vocabulary = loadVocabulary();
-
-
-
-
-
-			auto* root = new trieNode();
-
-
-
-			buildTrie(vocabulary, root);
-
-
-
-			//std::ifstream corpusStream("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
-			std::ifstream corpusStream("/home/swann7777777/CLionProjects/SwaggTransformer/testCorpus.txt");
-
-
-
-
-			std::unordered_map<std::pair<int, int>, int, pair_hash> frequencies;
-
-
-
-
-			std::vector<std::thread> threads;
-
-			int threadCount = std::thread::hardware_concurrency();
-
-			std::mutex corpusMutex;
-			std::mutex frequenciesMutex;
-
-
-			for (int i = 0; i < threadCount; i++) {
-
-				threads.emplace_back([&corpusStream, &root, &frequencies, &corpusMutex, &frequenciesMutex, this]() {
-
-
-					std::string corpusString;
-
-					while (true) {
-
-
-						{
-							std::lock_guard<std::mutex> lock(corpusMutex);
-							if (!tokenizer::loadCorpus(corpusStream, corpusString)) {
-								break;
-							}
-						}
-
-						std::vector<std::string> words = tokenizer::normalizeCorpus(corpusString);
-
-
-
-
-						std::vector<std::vector<int>> tokenizedWords = tokenizer::tokenizeCorpus(words, root);
-
-
-
-
-						std::vector<std::pair<int, int>> pairs = tokenizer::createPairs(tokenizedWords);
-
-
-						{
-							std::lock_guard<std::mutex> lock(frequenciesMutex);
-							tokenizer::calculateFrequencies(pairs, frequencies);
-						}
-
-						words.clear();
-						tokenizedWords.clear();
-						pairs.clear();
-
-					}
-				});
-			}
-
-			for (auto& t : threads) {
-				t.join();
-			}
-
-
-
-			std::vector<std::pair<std::pair<int, int>, int>> orderedFrequencies = orderFrequencies(frequencies);
-
-
-			auto runEnd = std::chrono::high_resolution_clock::now();
-
-
-			std::chrono::duration<double> runtime = runEnd - runStart;
-
-
-
-			outputPair(vocabulary, orderedFrequencies);
-
-
-
-			deleteTrie(root);
-
-
-
-			vocabulary.clear();
-			frequencies.clear();
-			orderedFrequencies.clear();
-
-			std::cout << "runtime : " << runtime << "\n";
-		}
-	}
 
 };
 
-#endif //TOKENIZER_H
+
+
+
+
+
+
+
+
+
+
+#endif //SWAGGGPT_TOKENIZERS_H

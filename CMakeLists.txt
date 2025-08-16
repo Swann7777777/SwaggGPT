@@ -7,5 +7,5 @@ include_directories(headers)
 
 add_executable(SwaggGPT
         headers/embedding.h
-        headers/tokenizer.h
-        source/main.cpp)
+        source/main.cpp
+        headers/tokenizer.h)

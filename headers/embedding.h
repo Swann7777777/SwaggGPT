@@ -4,41 +4,10 @@
 
 
 #include <iostream>
+#include <vector>
 
 class embedding {
 public:
-
-    void loadCorpus() {
-
-    }
-
-
-
-    void normalizeCorpus() {
-
-    }
-
-
-    void tokenizeCorpus() {
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

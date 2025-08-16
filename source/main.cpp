@@ -3,11 +3,10 @@
 
 
 int main() {
+    constexpr tokenizer tokenizerObject;
 
-    tokenizer tokenizerObject;
 
-
-    tokenizerObject.tokenize();
+    tokenizer::tokenize();
 
 
 
