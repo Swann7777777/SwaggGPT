@@ -1,3 +1,6 @@
+#ifndef SWAGGGPT_BACKUP_H
+#define SWAGGGPT_BACKUP_H
+
 #ifndef SWAGGGPT_TOKENIZERS_H
 #define SWAGGGPT_TOKENIZERS_H
 
@@ -5,12 +8,10 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <algorithm>
 #include <chrono>
 #include <unordered_map>
 #include <thread>
 #include <mutex>
-#include <ranges>
 #include <string_view>
 #include <regex>
 
@@ -86,9 +87,7 @@ public:
     }
 
 
-    static void loadVocabulary(std::vector<std::string> &vocabulary) {
-
-        std::ifstream vocabularyFileIn("../output/vocabulary.txt");
+    static void loadVocabulary(std::ifstream &vocabularyFileIn, std::vector<std::string> &vocabulary) {
 
         vocabulary.reserve(10000);
 
@@ -100,7 +99,7 @@ public:
     }
 
 
-    static void insertTrie(const std::string &key, trieNode* &root, const int &index) {
+    static void insertTrie(const std::string &key, trieNode* root, const int &index) {
 
         trieNode* node = root;
 
@@ -141,6 +140,7 @@ public:
         };
 
         std::regex url("url=.+?;");
+        std::regex doubleBrackets("\\{\\{.*?\\}\\}");
 
         std::stringstream word;
 
@@ -172,15 +172,17 @@ public:
                             break;
                         }
 
-                        if (line[0] != '[' && line[0] != '!' && line[0] != '|') {
+                        if (line[0] != '[' && line[0] != '!' && line[0] != '|' && line[0] != '=' && line[0] != ':') {
 
                             line = std::regex_replace(line, url, "");
+                            line = std::regex_replace(line, doubleBrackets, "");
 
                             for (int i = 0; i < line.size(); i++) {
 
                                 unsigned char c = line[i];
 
                                 if (c == '[') {
+
                                     i++;
                                     c = line[i];
                                     if (c == '[') {
@@ -193,6 +195,7 @@ public:
                                     }
 
                                 }
+
 
                                 if (c >= 0xC3 && i + 1 < line.size()) {
                                     if (std::string utf8Char = line.substr(i, 2); specialChar.contains(utf8Char)) {
@@ -244,55 +247,97 @@ public:
     }
 
 
-    static void tokenizeWords(const std::unordered_map<std::string, int> &words, std::unordered_map<std::vector<int>, int, vectorHash> &tokenizedWords, const trieNode* root) {
+    static std::vector<int> tokenizeWord(const std::string &word,
+        const trieNode* root,
+        std::unordered_map<std::string, std::vector<int>> &wordToToken) {
 
-        for (const auto& [word, count] : words) {
+        const trieNode* node = root;
 
-            const trieNode* node = root;
+        std::vector<int> tempTokens;
 
-            std::vector<int> tempTokens;
+        int index = 0;
 
-            int index = 0;
+        int token = -1;
 
-            int token = -1;
+        for (int i = 0; i < word.size();) {
 
-            for (int i = 0; i < word.size();) {
+            if (node->children[word[i] - 'a'] != nullptr) {
 
-                if (node->children[word[i] - 'a'] != nullptr) {
+                node = node->children[word[i] - 'a'];
 
-                    node = node->children[word[i] - 'a'];
+                if (node->index != -1) {
 
-                    if (node->index != -1) {
-                        token = node->index;
-                        index = i;
-                    }
-
-                    i++;
+                    token = node->index;
+                    index = i;
                 }
 
-                else {
-                    tempTokens.push_back(token);
-                    i = index + 1;
-                    node = root;
-                }
+                i++;
             }
 
-            tempTokens.push_back(token);
+            else {
 
-            tokenizedWords[tempTokens] = count;
+                tempTokens.push_back(token);
+                i = index + 1;
+                node = root;
+            }
+        }
+
+        tempTokens.push_back(token);
+
+        if (tempTokens.size() > 1) {
+
+            wordToToken[word] = tempTokens;
+            return tempTokens;
         }
     }
 
 
 
+
+    static void createPairs(const std::vector<int> &tokenizedWord,
+        const int &count,
+        std::unordered_map<std::pair<int, int>, int, pairHash> &pairs) {
+
+
+        for (int i = 0; i < tokenizedWord.size() - 1; i++) {
+
+            pairs[{tokenizedWord[i], tokenizedWord[i + 1]}] += count;
+        }
+    }
+
+    static void outputVocabulary(std::unordered_map<std::pair<int, int>, int, pairHash> &pairs, std::ofstream &vocabularyFileOut, std::vector<std::string> &vocabulary, trieNode* root) {
+
+        std::pair<std::pair<int, int>, int> max = {{0, 0}, 0};
+
+        for (const auto& [pair, count] : pairs) {
+
+            if (count > max.second) {
+
+                max = {pair, count};
+            }
+        }
+
+        std::cout << vocabulary[max.first.first] + vocabulary[max.first.second] << " : " << max.second << "\n";
+
+        vocabularyFileOut << "\n" << vocabulary[max.first.first] + vocabulary[max.first.second];
+
+        insertTrie(vocabulary[max.first.first] + vocabulary[max.first.second], root, vocabulary.size());
+
+        vocabulary.push_back(vocabulary[max.first.first] + vocabulary[max.first.second]);
+    }
+
+
     static void tokenize() {
+
+        std::vector<std::thread> threads;
 
         std::vector<std::string> vocabulary;
 
         vocabulary.reserve(30000);
 
+        std::ifstream vocabularyFileIn("../output/vocabulary.txt");
 
-        loadVocabulary(vocabulary);
+        loadVocabulary(vocabularyFileIn, vocabulary);
 
         auto *root = new trieNode();
 
@@ -300,47 +345,64 @@ public:
 
         std::unordered_map<std::string, int> words;
 
-        words.reserve(10000);
+        words.reserve(1000000);
 
         loadWords(words);
+
+        std::ofstream vocabularyFileOut("../output/vocabulary.txt", std::ios::app);
 
         std::unordered_map<std::vector<int>, int, vectorHash> tokenizedWords;
 
         tokenizedWords.reserve(words.size());
 
-        tokenizeWords(words, tokenizedWords, root);
+        std::unordered_map<std::pair<int, int>, int, pairHash> pairs;
+
+        pairs.reserve(10000000);
+
+        std::unordered_map<std::string, std::vector<int>> wordToToken;
+
+        wordToToken.reserve(tokenizedWords.size());
 
 
-        for (const auto&[fst, snd] : tokenizedWords) {
-            for (const auto& i : fst) {
-                std::cout << vocabulary[i] << " ";
-            }
-            std::cout << ": " << snd << "\n";
+
+
+        for (const auto& [word, count] : words) {
+
+            tokenizedWords[tokenizeWord(word, root, wordToToken)] = count;
         }
 
-        std::cout << tokenizedWords.size();
+        for (int i = 0; i < 1000; i++) {
+
+            auto start = std::chrono::high_resolution_clock::now();
+
+            for (const auto& [word, count] : words) {
+
+                if (word.find(vocabulary.back()) != std::string::npos) {
+
+                    tokenizedWords.erase(wordToToken[word]);
+
+                    tokenizedWords[tokenizeWord(word, root, wordToToken)] = count;
+                }
+            }
+
+            for (const auto& [tokenizedWord, count] : tokenizedWords) {
+
+                createPairs(tokenizedWord, count, pairs);
+            }
+
+            outputVocabulary(pairs, vocabularyFileOut, vocabulary, root);
+
+            pairs.clear();
 
 
-
-
-
-
-
-
+            std::cout << static_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start) << "\n";
+        }
     }
-
-
-
 };
 
 
 
 
 
-
-
-
-
-
-
 #endif //SWAGGGPT_TOKENIZERS_H
+#endif //SWAGGGPT_BACKUP_H
