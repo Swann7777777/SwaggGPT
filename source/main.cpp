@@ -3,10 +3,9 @@
 
 
 int main() {
-    constexpr tokenizer tokenizerObject;
 
 
-    tokenizer::tokenize();
+    embedding::embed();
 
 
 
