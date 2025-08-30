@@ -1,5 +1,0 @@
-EMBEDDING :
-- load corpus
-- load vocabulary
-- generate one hot vector
-- feed forward
