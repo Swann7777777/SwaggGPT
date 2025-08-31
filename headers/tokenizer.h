@@ -120,126 +120,98 @@ public:
 
 
 
-    static void loadWords(std::unordered_map<std::string, int> &words) {
-
-        //std::ifstream corpusFile("../testCorpus.txt");
-        std::ifstream corpusFile("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
-
-
-        std::string line;
-
-        std::unordered_map<std::string, char> specialChar = {
-            {"\xC3\xA9", 'e'}, {"\xC3\xA0", 'a'}, {"\xC3\xA8", 'e'}, {"\xC3\xB9", 'u'},
-            {"\xC3\xAA", 'e'}, {"\xC3\xA2", 'a'}, {"\xC3\xA7", 'c'}, {"\xC3\xB4", 'o'},
-            {"\xC3\xAE", 'i'}, {"\xC3\xAF", 'i'}, {"\xC3\xBB", 'u'}
-        };
+    static void loadWords(std::unordered_map<std::string, int> &words, std::ifstream &corpusFile) {
 
         std::unordered_map<std::string_view, char> htmlEntities = {
             {"&quot;", '"'}, {"&lt;", '<'}, {"&gt;", '>'}, {"&amp;", '&'},
             {"&apos;", '\''}
         };
 
-        std::regex url("url=.+?;");
-        std::regex doubleBrackets("\\{\\{.*?\\}\\}");
 
-        std::stringstream word;
-
-        bool stop = false;
-
-        while (!stop) {
-
-            bool match = false;
-
-            while (!match) {
-
-                if (!getline(corpusFile, line)) {
-                    stop = true;
-                    break;
-                }
-
-                if (line.find("<text") != std::string::npos && line.find("</text") == std::string::npos) {
-
-                    while (!match) {
-
-                        if (!getline(corpusFile, line)) {
-                            stop = true;
-                            break;
-                        }
-
-                        if (line.find("</text") != std::string::npos) {
-
-                            match = true;
-                            break;
-                        }
-
-                        if (line[0] != '[' && line[0] != '!' && line[0] != '|' && line[0] != '=' && line[0] != ':') {
-
-                            line = std::regex_replace(line, url, "");
-                            line = std::regex_replace(line, doubleBrackets, "");
-
-                            for (int i = 0; i < line.size(); i++) {
-
-                                unsigned char c = line[i];
-
-                                if (c == '[') {
-
-                                    i++;
-                                    c = line[i];
-                                    if (c == '[') {
-                                        continue;
-                                    }
-
-                                    while (c != ']' && i + 1 < line.size()) {
-                                        i++;
-                                        c = line[i];
-                                    }
-
-                                }
+        std::string line;
 
 
-                                if (c >= 0xC3 && i + 1 < line.size()) {
-                                    if (std::string utf8Char = line.substr(i, 2); specialChar.contains(utf8Char)) {
+        while (true) {
 
-                                        word << specialChar[utf8Char];
-                                    }
+            if (!getline(corpusFile, line)) {
+                break;
+            }
 
-                                    i += 2;
-                                }
+            if (line.find("<text") != std::string::npos) {
 
-                                if (c == '&') {
-                                    for (auto& [entity, ch] : htmlEntities) {
+                while (true) {
 
-                                        if (i + entity.length() <= line.size() && line.compare(i, entity.length(), entity) == 0) {
+                    if (!getline(corpusFile, line)) {
+                        break;
+                    }
 
-                                            line.replace(i, entity.length(), std::string(1, ch));
+                    if (line.find("</text") != std::string::npos) {
+                        break;
+                    }
 
-                                            i += entity.length();
+                    if (line[0] == '[' || line[0] == '!' || line[0] == '|' || line[0] == '=' || line[0] == ':') {
+                        continue;
+                    }
 
-                                            break;
-                                        }
-                                    }
-                                }
+                    std::string word;
 
-                                if (std::isalpha(c)) {
+                    for (int i = 0; i < line.size(); i++) {
 
-                                    word << static_cast<char>(std::tolower(c));
-                                }
+                        unsigned char c = line[i];
 
-                                else {
-                                    if (!word.str().empty()) {
-                                        words[word.str()]++;
-                                        word.str("");
-                                        word.clear();
+                        if (c == '[') {
 
-                                    }
-                                }
+                            i++;
+
+                            if (line[i] == '[') {
+                                continue;
                             }
-                            if (!word.str().empty()) {
-                                words[word.str()]++;
-                                word.str("");
-                                word.clear();
+
+                            while (i + 1 < line.size() && line[i] != ']') {
+                                i++;
                             }
                         }
+
+                        if (c == '{') {
+
+                            i++;
+
+                            if (line[i] != '{') {
+                                continue;
+                            }
+
+                            while (line[i] != '}' && i + 1 < line.size() && line[i + 1] != '}') {
+                                i++;
+                            }
+                        }
+
+                        if (c == '&') {
+                            for (auto& [entity, ch] : htmlEntities) {
+
+                                if (i + entity.length() <= line.size() && line.compare(i, entity.length(), entity) == 0) {
+
+                                    line.replace(i, entity.length(), std::string(1, ch));
+
+                                    i += static_cast<int>(entity.length());
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (std::isalpha(c)) {
+                            word += static_cast<char>(std::tolower(c));
+                        }
+
+                        else if (!word.empty()) {
+                            words[word]++;
+                            word.clear();
+                        }
+                    }
+
+                    if (!word.empty()) {
+                        words[word]++;
+                        word.clear();
                     }
                 }
             }
@@ -347,7 +319,9 @@ public:
 
         words.reserve(1000000);
 
-        loadWords(words);
+        std::ifstream corpusFile("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
+
+        loadWords(words, corpusFile);
 
         std::ofstream vocabularyFileOut("../output/vocabulary.txt", std::ios::app);
 
