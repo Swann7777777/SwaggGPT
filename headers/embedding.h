@@ -2,7 +2,7 @@
 #define EMBEDDING_H
 
 
-
+#include <random>
 
 
 class embedding {
@@ -199,8 +199,55 @@ public:
     }
 
 
+    static void loadEmbeddings(std::ifstream &embeddingsFileIn, const int &dimension, const int &size, std::vector<std::vector<float>> &embeddings) {
+
+        embeddings.resize(size);
+
+        for (auto& i : embeddings) {
+
+            i.resize(dimension);
+        }
+
+        for (auto& i : embeddings) {
+
+            embeddingsFileIn.read(reinterpret_cast<char*>(i.data()), dimension * sizeof(float));
+        }
+    }
+
+
+    static void generateEmbeddings(std::ofstream &embeddingsFileOut, const int &dimension, const int &size) {
+
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        std::uniform_int_distribution<> dist(0, 10000);
+
+        std::vector<std::vector<float>> embeddings(size);
+
+        for (int i = 0; i < size; i++) {
+
+            for (int j = 0; j < dimension; j++) {
+
+                embeddings[i].push_back(static_cast<float>(dist(rng)) / static_cast<float>(10000));
+            }
+
+            embeddingsFileOut.write(reinterpret_cast<const char*>(embeddings[i].data()), dimension * sizeof(float));
+        }
+    }
+
+
+
+
+    static void outputEmbeddings() {
+
+    }
+
+
 
     static void embed() {
+
+        constexpr int dimension = 512;
+
+        std::ofstream embeddingsFileOut("../output/embeddings.bin", std::ios::binary);
 
         auto *root = new trieNode;
 
@@ -209,6 +256,23 @@ public:
         std::ifstream vocabularyFile("../output/vocabulary.txt");
 
         loadVocabulary(vocabularyFile, vocabulary);
+
+        std::vector<std::vector<float>> embeddings;
+
+        generateEmbeddings(embeddingsFileOut, dimension, static_cast<int>(vocabulary.size()));
+
+        embeddingsFileOut.close();
+
+        std::ifstream embeddingsFileIn("../output/embeddings.bin", std::ios::binary);
+
+        loadEmbeddings(embeddingsFileIn, dimension, vocabulary.size(), embeddings);
+
+        for (const auto& i : embeddings) {
+            for (const auto& j : i) {
+                std::cout << j << " ";
+            }
+            std::cout << "\n";
+        }
 
         buildTrie(root, vocabulary);
 
@@ -234,8 +298,6 @@ public:
 
 
 };
-
-
 
 
 
