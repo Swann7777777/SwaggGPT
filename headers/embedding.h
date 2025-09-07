@@ -2,7 +2,9 @@
 #define EMBEDDING_H
 
 
+#include <cmath>
 #include <random>
+#include <numeric>
 
 
 class embedding {
@@ -66,7 +68,7 @@ public:
 
 
 
-    static bool loadArticle(std::vector<std::string> &article, std::ifstream &corpusFile) {
+    static bool loadWords(std::vector<std::string> &article, std::ifstream &corpusFile) {
 
         std::unordered_map<std::string_view, char> htmlEntities = {
             {"&quot;", '"'}, {"&lt;", '<'}, {"&gt;", '>'}, {"&amp;", '&'},
@@ -219,7 +221,7 @@ public:
 
         std::random_device dev;
         std::mt19937 rng(dev());
-        std::uniform_int_distribution<> dist(0, 10000);
+        std::uniform_int_distribution<> dist(-10000, 10000);
 
         std::vector<std::vector<float>> embeddings(size);
 
@@ -235,10 +237,81 @@ public:
     }
 
 
+    static float sigmoid(const float x) {
+        return 1.0f / (1.0f + std::exp(-x));
+    }
+
+    static void forwardPass(std::vector<std::vector<float>> &embeddings,
+        const int &windowSize,
+        const int &negativeSamplesCount,
+        const std::vector<int> &tokenizedWords) {
 
 
-    static void outputEmbeddings() {
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        std::uniform_int_distribution<> dist(0, static_cast<int>(tokenizedWords.size() - 1));
 
+
+        for (int i = 0; i < 100; i++) {
+
+
+
+            for (int j = i - windowSize; j < i + windowSize + 1; j++) {
+
+                std::vector<float> negativeSamplesDotProducts;
+
+                if (j == i || j < 0 || j >= tokenizedWords.size()) {
+                    continue;
+                }
+
+                const float positiveSampleDotProduct = std::inner_product(embeddings[tokenizedWords[j]].begin(),
+                    embeddings[tokenizedWords[j]].end(),
+                    embeddings[tokenizedWords[i]].begin(),
+                    0.0f);
+
+                //std::cout << positiveSamplesDotProduct << "\n\n";
+
+                for (int k = 0; k < negativeSamplesCount; k++) {
+
+                    const int negativeSampleIndex = dist(rng);
+
+                    negativeSamplesDotProducts.push_back(std::inner_product(embeddings[tokenizedWords[negativeSampleIndex]].begin(),
+                        embeddings[tokenizedWords[negativeSampleIndex]].end(),
+                        embeddings[tokenizedWords[i]].begin(),
+                        0.0f));
+
+                    //std::cout << negativeSamplesDotProducts.back() << "\n";
+                }
+
+                //std::cout << "\n";
+
+                float loss = -std::log(sigmoid(positiveSampleDotProduct));
+
+                for (const auto& dotProduct : negativeSamplesDotProducts) {
+
+                    loss -= std::log(sigmoid(-dotProduct));
+                }
+
+                std::cout << loss << "\n";
+            }
+        }
+    }
+
+
+
+
+
+
+
+
+
+    static void outputEmbeddings(const int &dimension,const std::vector<std::vector<float>> &embeddings, std::ofstream &embeddingsFileOut) {
+
+
+        for (const auto& i : embeddings) {
+
+            embeddingsFileOut.write(reinterpret_cast<const char*>(i.data()), dimension * sizeof(float));
+        }
     }
 
 
@@ -246,6 +319,12 @@ public:
     static void embed() {
 
         constexpr int dimension = 512;
+
+        constexpr int windowSize = 3;
+
+        constexpr float learningRate = 1.0f;
+
+        constexpr int negativeSamplesCount = 5;
 
         std::ofstream embeddingsFileOut("../output/embeddings.bin", std::ios::binary);
 
@@ -267,20 +346,13 @@ public:
 
         loadEmbeddings(embeddingsFileIn, dimension, vocabulary.size(), embeddings);
 
-        for (const auto& i : embeddings) {
-            for (const auto& j : i) {
-                std::cout << j << " ";
-            }
-            std::cout << "\n";
-        }
-
         buildTrie(root, vocabulary);
 
         std::ifstream corpusFile("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
 
         std::vector<std::string> words;
 
-        while (loadArticle(words, corpusFile)) {
+        while (loadWords(words, corpusFile)) {
 
             std::vector<int> tokenizedWords;
 
@@ -288,12 +360,12 @@ public:
 
             words.clear();
 
-            for (const auto& i : tokenizedWords) {
-
-            }
+            forwardPass(embeddings, windowSize, negativeSamplesCount, tokenizedWords);
 
             break;
         }
+
+        outputEmbeddings(dimension, embeddings, embeddingsFileOut);
     }
 
 
