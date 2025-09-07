@@ -217,10 +217,8 @@ public:
     }
 
 
-    static void generateEmbeddings(std::ofstream &embeddingsFileOut, const int &dimension, const int &size) {
+    static void generateEmbeddings(std::ofstream &embeddingsFileOut, const int &dimension, const int &size, std::mt19937 rng) {
 
-        std::random_device dev;
-        std::mt19937 rng(dev());
         std::uniform_int_distribution<> dist(-10000, 10000);
 
         std::vector<std::vector<float>> embeddings(size);
@@ -242,75 +240,59 @@ public:
     }
 
     static void forwardPass(std::vector<std::vector<float>> &embeddings,
-        const int &windowSize,
         const int &negativeSamplesCount,
-        const std::vector<int> &tokenizedWords) {
+        const std::vector<int> &tokenizedWords,
+        float &positiveSampleError,
+        std::vector<float> &negativeSamplesError,
+        const std::vector<float> &centreWordEmbedding,
+        const std::vector<float> &positiveSampleEmbedding,
+        std::vector<int> &negativeSamplesIndices,
+        std::mt19937 &rng) {
 
 
-        std::random_device dev;
-        std::mt19937 rng(dev());
         std::uniform_int_distribution<> dist(0, static_cast<int>(tokenizedWords.size() - 1));
 
 
-        for (int i = 0; i < 100; i++) {
+        std::vector<float> negativeSamplesDotProducts;
 
+        const float positiveSampleDotProduct = std::inner_product(positiveSampleEmbedding.begin(),
+            positiveSampleEmbedding.end(),
+            centreWordEmbedding.begin(),
+            0.0f);
 
+        positiveSampleError = sigmoid(positiveSampleDotProduct);
 
-            for (int j = i - windowSize; j < i + windowSize + 1; j++) {
+        for (int i = 0; i < negativeSamplesCount; i++) {
 
-                std::vector<float> negativeSamplesDotProducts;
+            const int negativeSampleIndex = dist(rng);
 
-                if (j == i || j < 0 || j >= tokenizedWords.size()) {
-                    continue;
-                }
+            negativeSamplesDotProducts.push_back(std::inner_product(embeddings[tokenizedWords[negativeSampleIndex]].begin(),
+                embeddings[tokenizedWords[negativeSampleIndex]].end(),
+                centreWordEmbedding.begin(),
+                0.0f));
 
-                const float positiveSampleDotProduct = std::inner_product(embeddings[tokenizedWords[j]].begin(),
-                    embeddings[tokenizedWords[j]].end(),
-                    embeddings[tokenizedWords[i]].begin(),
-                    0.0f);
+            negativeSamplesIndices.push_back(negativeSampleIndex);
+        }
 
-                //std::cout << positiveSamplesDotProduct << "\n\n";
+        for (const auto& dotProduct : negativeSamplesDotProducts) {
 
-                for (int k = 0; k < negativeSamplesCount; k++) {
-
-                    const int negativeSampleIndex = dist(rng);
-
-                    negativeSamplesDotProducts.push_back(std::inner_product(embeddings[tokenizedWords[negativeSampleIndex]].begin(),
-                        embeddings[tokenizedWords[negativeSampleIndex]].end(),
-                        embeddings[tokenizedWords[i]].begin(),
-                        0.0f));
-
-                    //std::cout << negativeSamplesDotProducts.back() << "\n";
-                }
-
-                //std::cout << "\n";
-
-                float loss = -std::log(sigmoid(positiveSampleDotProduct));
-
-                for (const auto& dotProduct : negativeSamplesDotProducts) {
-
-                    loss -= std::log(sigmoid(-dotProduct));
-                }
-
-                std::cout << loss << "\n";
-            }
+            negativeSamplesError.push_back(sigmoid(-dotProduct));
         }
     }
 
 
+    static void backpropagation() {
+
+    }
 
 
 
-
-
-
-
-    static void outputEmbeddings(const int &dimension,const std::vector<std::vector<float>> &embeddings, std::ofstream &embeddingsFileOut) {
+    static void outputEmbeddings(const std::vector<std::vector<float>> &embeddings, std::ofstream &embeddingsFileOut) {
 
 
         for (const auto& i : embeddings) {
 
-            embeddingsFileOut.write(reinterpret_cast<const char*>(i.data()), dimension * sizeof(float));
+            embeddingsFileOut.write(reinterpret_cast<const char*>(i.data()), i.size() * sizeof(float));
         }
     }
 
@@ -326,7 +308,17 @@ public:
 
         constexpr int negativeSamplesCount = 5;
 
-        std::ofstream embeddingsFileOut("../output/embeddings.bin", std::ios::binary);
+
+
+
+
+        std::random_device dev;
+        std::mt19937 rng(dev());
+
+
+
+
+
 
         auto *root = new trieNode;
 
@@ -336,36 +328,86 @@ public:
 
         loadVocabulary(vocabularyFile, vocabulary);
 
+        buildTrie(root, vocabulary);
+
+
+
+
+        std::ofstream embeddingsFileOut("../output/embeddings.bin", std::ios::binary);
+
         std::vector<std::vector<float>> embeddings;
 
-        generateEmbeddings(embeddingsFileOut, dimension, static_cast<int>(vocabulary.size()));
+        generateEmbeddings(embeddingsFileOut, dimension, static_cast<int>(vocabulary.size()), rng);
 
         embeddingsFileOut.close();
 
+
+
+
+
         std::ifstream embeddingsFileIn("../output/embeddings.bin", std::ios::binary);
 
-        loadEmbeddings(embeddingsFileIn, dimension, vocabulary.size(), embeddings);
+        loadEmbeddings(embeddingsFileIn, dimension, static_cast<int>(vocabulary.size()), embeddings);
 
-        buildTrie(root, vocabulary);
 
-        std::ifstream corpusFile("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
+
+
+
 
         std::vector<std::string> words;
 
+        std::ifstream corpusFile("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
+
         while (loadWords(words, corpusFile)) {
 
+
             std::vector<int> tokenizedWords;
+
+            float positiveSampleError;
+
+            std::vector<float> negativeSamplesError;
+
+            std::vector<int> negativeSamplesIndices;
 
             tokenizeWords(words, root, tokenizedWords);
 
             words.clear();
 
-            forwardPass(embeddings, windowSize, negativeSamplesCount, tokenizedWords);
+
+
+
+            for (int i = 0; i < 100; i++) {
+
+                for (int j = i - windowSize; j < i + windowSize + 1; j++) {
+
+                    if (j == i || j < 0 || j >= tokenizedWords.size()) {
+                        continue;
+                    }
+
+                    forwardPass(embeddings,
+                        negativeSamplesCount,
+                        tokenizedWords,
+                        positiveSampleError,
+                        negativeSamplesError,
+                        embeddings[tokenizedWords[i]],
+                        embeddings[tokenizedWords[j]],
+                        negativeSamplesIndices,
+                        rng);
+
+                    std::cout << positiveSampleError << "\n";
+
+                    backpropagation();
+
+                    negativeSamplesError.clear();
+                }
+            }
 
             break;
         }
 
-        outputEmbeddings(dimension, embeddings, embeddingsFileOut);
+
+
+        outputEmbeddings(embeddings, embeddingsFileOut);
     }
 
 
