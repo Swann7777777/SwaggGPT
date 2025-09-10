@@ -42,7 +42,6 @@ public:
 
     static void buildTrie(trieNode* &root, const std::vector<std::string> &vocabulary) {
 
-
         int index = 0;
 
         for (const auto& word : vocabulary) {
@@ -52,7 +51,6 @@ public:
             for (const auto& c : word) {
 
                 if (node->children[c - 'a'] == nullptr) {
-
                     node->children[c - 'a'] = new trieNode();
                 }
 
@@ -60,10 +58,8 @@ public:
             }
 
             node->index = index;
-
             index++;
         }
-
     }
 
 
@@ -75,13 +71,10 @@ public:
             {"&apos;", '\''}
         };
 
-
         std::string line;
 
         while (getline(corpusFile, line)) {
-
             if (line.find("<text") != std::string::npos) {
-
                 while (true) {
 
                     if (!getline(corpusFile, line)) {
@@ -196,6 +189,7 @@ public:
                     node = root;
                 }
             }
+
             tokenizedWords.push_back(token);
         }
     }
@@ -219,7 +213,7 @@ public:
 
     static void generateEmbeddings(std::ofstream &embeddingsFileOut, const int &dimension, const int &size, std::mt19937 rng) {
 
-        std::uniform_int_distribution<> dist(-10000, 10000);
+        std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
 
         std::vector<std::vector<float>> embeddings(size);
 
@@ -227,7 +221,7 @@ public:
 
             for (int j = 0; j < dimension; j++) {
 
-                embeddings[i].push_back(static_cast<float>(dist(rng)) / static_cast<float>(10000));
+                embeddings[i].push_back(dist(rng));
             }
 
             embeddingsFileOut.write(reinterpret_cast<const char*>(embeddings[i].data()), dimension * sizeof(float));
@@ -235,54 +229,100 @@ public:
     }
 
 
+
+
+
+
+
     static float sigmoid(const float x) {
         return 1.0f / (1.0f + std::exp(-x));
     }
 
-    static void forwardPass(std::vector<std::vector<float>> &embeddings,
-        const int &negativeSamplesCount,
-        const std::vector<int> &tokenizedWords,
-        float &positiveSampleError,
-        std::vector<float> &negativeSamplesError,
-        const std::vector<float> &centreWordEmbedding,
-        const std::vector<float> &positiveSampleEmbedding,
-        std::vector<int> &negativeSamplesIndices,
-        std::mt19937 &rng) {
 
 
-        std::uniform_int_distribution<> dist(0, static_cast<int>(tokenizedWords.size() - 1));
+
+
+    static void forwardPass(
+        float &positiveError,
+        std::vector<float> &negativeErrors,
+        const std::vector<float> &centreEmbedding,
+        const std::vector<float> &contextEmbedding,
+        const std::vector<std::vector<float>> &negativeEmbeddings) {
+
 
 
         std::vector<float> negativeSamplesDotProducts;
 
-        const float positiveSampleDotProduct = std::inner_product(positiveSampleEmbedding.begin(),
-            positiveSampleEmbedding.end(),
-            centreWordEmbedding.begin(),
+        const float positiveSampleDotProduct = std::inner_product(contextEmbedding.begin(),
+            contextEmbedding.end(),
+            centreEmbedding.begin(),
             0.0f);
 
-        positiveSampleError = sigmoid(positiveSampleDotProduct);
+        positiveError = sigmoid(positiveSampleDotProduct);
 
-        for (int i = 0; i < negativeSamplesCount; i++) {
+        for (const auto& negativeEmbedding : negativeEmbeddings) {
 
-            const int negativeSampleIndex = dist(rng);
-
-            negativeSamplesDotProducts.push_back(std::inner_product(embeddings[tokenizedWords[negativeSampleIndex]].begin(),
-                embeddings[tokenizedWords[negativeSampleIndex]].end(),
-                centreWordEmbedding.begin(),
+            negativeSamplesDotProducts.push_back(std::inner_product(negativeEmbedding.begin(),
+                negativeEmbedding.end(),
+                centreEmbedding.begin(),
                 0.0f));
 
-            negativeSamplesIndices.push_back(negativeSampleIndex);
         }
 
         for (const auto& dotProduct : negativeSamplesDotProducts) {
 
-            negativeSamplesError.push_back(sigmoid(-dotProduct));
+            negativeErrors.push_back(sigmoid(-dotProduct));
         }
     }
 
 
-    static void backpropagation() {
+    static void backpropagation(
+        std::vector<float> &centreEmbedding,
+        std::vector<float> &contextEmbedding,
+        const float &learningRate,
+        const std::vector<int> &negativeIndices,
+        std::vector<std::vector<float>> &negativeEmbeddings,
+        const float &positiveError,
+        const std::vector<float> &negativeErrors) {
 
+
+        std::vector<float> centreSignal;
+        std::vector<float> contextSignal;
+        std::vector<std::vector<float>> negativeSignals(negativeErrors.size());
+
+
+        for (const auto& i : contextEmbedding) {
+
+            centreSignal.push_back((positiveError - 1) * i);
+        }
+
+        for (const auto& i : centreEmbedding) {
+
+            contextSignal.push_back((positiveError - 1) * i);
+        }
+
+        for (int i = 0; i < centreEmbedding.size(); i++) {
+
+            centreEmbedding[i] -= centreSignal[i] * learningRate;
+        }
+
+        for (int i = 0; i < contextEmbedding.size(); i++) {
+
+            contextEmbedding[i] -= contextSignal[i] * learningRate;
+        }
+
+        for (int i = 0; i < negativeEmbeddings.size(); i++) {
+
+            for (const auto& j : negativeEmbeddings[i]) {
+
+                negativeSignals[i].push_back(negativeErrors[i] * j);
+            }
+
+            for (int j = 0; j < negativeEmbeddings[i].size(); j++) {
+
+                negativeEmbeddings[i][j] -= negativeSignals[i][j] * learningRate;
+            }
+        }
     }
 
 
@@ -302,11 +342,11 @@ public:
 
         constexpr int dimension = 512;
 
-        constexpr int windowSize = 3;
+        constexpr int windowSize = 8;
 
-        constexpr float learningRate = 1.0f;
+        constexpr float learningRate = 0.025f;
 
-        constexpr int negativeSamplesCount = 5;
+        constexpr int negativeSamplesCount = 10;
 
 
 
@@ -335,8 +375,6 @@ public:
 
         std::ofstream embeddingsFileOut("../output/embeddings.bin", std::ios::binary);
 
-        std::vector<std::vector<float>> embeddings;
-
         generateEmbeddings(embeddingsFileOut, dimension, static_cast<int>(vocabulary.size()), rng);
 
         embeddingsFileOut.close();
@@ -347,25 +385,32 @@ public:
 
         std::ifstream embeddingsFileIn("../output/embeddings.bin", std::ios::binary);
 
+        std::vector<std::vector<float>> embeddings;
+
         loadEmbeddings(embeddingsFileIn, dimension, static_cast<int>(vocabulary.size()), embeddings);
 
 
 
-
+        //while (true) {
+        //}
 
 
         std::vector<std::string> words;
 
         std::ifstream corpusFile("/home/swann7777777/Documents/simplewiki-20250701-pages-articles-multistream.xml");
 
-        while (loadWords(words, corpusFile)) {
+        std::uniform_int_distribution dist(0, static_cast<int>(vocabulary.size() - 1));
 
+
+        for (int v = 0; v < 1000; v++) {
+
+            loadWords(words, corpusFile);
 
             std::vector<int> tokenizedWords;
 
-            float positiveSampleError;
+            float positiveError;
 
-            std::vector<float> negativeSamplesError;
+            std::vector<float> negativeErrors;
 
             std::vector<int> negativeSamplesIndices;
 
@@ -374,9 +419,7 @@ public:
             words.clear();
 
 
-
-
-            for (int i = 0; i < 100; i++) {
+            for (int i = 0; i < tokenizedWords.size(); i++) {
 
                 for (int j = i - windowSize; j < i + windowSize + 1; j++) {
 
@@ -384,33 +427,65 @@ public:
                         continue;
                     }
 
-                    forwardPass(embeddings,
-                        negativeSamplesCount,
-                        tokenizedWords,
-                        positiveSampleError,
-                        negativeSamplesError,
-                        embeddings[tokenizedWords[i]],
-                        embeddings[tokenizedWords[j]],
-                        negativeSamplesIndices,
-                        rng);
 
-                    std::cout << positiveSampleError << "\n";
+                    std::vector<float> centreEmbedding = embeddings[tokenizedWords[i]];
 
-                    backpropagation();
+                    std::vector<float> contextEmbedding = embeddings[tokenizedWords[j]];
 
-                    negativeSamplesError.clear();
+                    std::vector<std::vector<float>> negativeEmbeddings;
+
+                    std::vector<int> negativeIndices;
+
+                    for (int k = 0; k < negativeSamplesCount; k++) {
+
+                        int index = dist(rng);
+
+                        negativeEmbeddings.push_back(embeddings[index]);
+                        negativeIndices.push_back(index);
+                    }
+
+                    forwardPass(
+                        positiveError,
+                        negativeErrors,
+                        centreEmbedding,
+                        contextEmbedding,
+                        negativeEmbeddings);
+
+
+                    float loss = -std::log(positiveError);
+
+                    for (const auto& k : negativeErrors) {
+
+                        loss += -std::log(k);
+                    }
+
+                    //std::cout << positiveError << "\n";
+
+                    //std::cout << loss << "\n";
+
+                    backpropagation(centreEmbedding, contextEmbedding, learningRate, negativeIndices, negativeEmbeddings, positiveError, negativeErrors);
+
+                    embeddings[tokenizedWords[i]] = centreEmbedding;
+
+                    embeddings[tokenizedWords[j]] = contextEmbedding;
+
+                    for (int k = 0; k < negativeSamplesCount; k++) {
+
+                        embeddings[negativeIndices[k]] = negativeEmbeddings[k];
+                    }
+
+                    negativeErrors.clear();
                 }
             }
-
-            break;
         }
 
 
+        std::ofstream embeddingsFileOut2("../output/embeddings.bin", std::ios::binary);
 
-        outputEmbeddings(embeddings, embeddingsFileOut);
+        outputEmbeddings(embeddings, embeddingsFileOut2);
+
+        embeddingsFileOut2.close();
     }
-
-
 };
 
 
