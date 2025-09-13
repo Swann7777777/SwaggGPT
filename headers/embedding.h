@@ -247,11 +247,12 @@ public:
         std::vector<float> &negativeErrors,
         const std::vector<float> &centreEmbedding,
         const std::vector<float> &contextEmbedding,
-        const std::vector<std::vector<float>> &negativeEmbeddings) {
+        const std::vector<int> &negativeIndices,
+        const std::vector<std::vector<float>> &embeddings) {
 
 
 
-        std::vector<float> negativeSamplesDotProducts;
+        std::vector<float> negativeSamplesDotProducts(negativeIndices.size());
 
         const float positiveSampleDotProduct = std::inner_product(contextEmbedding.begin(),
             contextEmbedding.end(),
@@ -260,18 +261,18 @@ public:
 
         positiveError = sigmoid(positiveSampleDotProduct);
 
-        for (const auto& negativeEmbedding : negativeEmbeddings) {
+        for (int i = 0; i < negativeIndices.size(); i++) {
 
-            negativeSamplesDotProducts.push_back(std::inner_product(negativeEmbedding.begin(),
-                negativeEmbedding.end(),
+            negativeSamplesDotProducts[i] = std::inner_product(embeddings[negativeIndices[i]].begin(),
+                embeddings[negativeIndices[i]].end(),
                 centreEmbedding.begin(),
-                0.0f));
+                0.0f);
 
         }
 
-        for (const auto& dotProduct : negativeSamplesDotProducts) {
+        for (int i = 0; i < negativeSamplesDotProducts.size(); i++) {
 
-            negativeErrors.push_back(sigmoid(-dotProduct));
+            negativeErrors[i] = sigmoid(-negativeSamplesDotProducts[i]);
         }
     }
 
@@ -281,24 +282,50 @@ public:
         std::vector<float> &contextEmbedding,
         const float &learningRate,
         const std::vector<int> &negativeIndices,
-        std::vector<std::vector<float>> &negativeEmbeddings,
+        std::vector<std::vector<float>> &embeddings,
         const float &positiveError,
         const std::vector<float> &negativeErrors) {
 
 
-        std::vector<float> centreSignal;
-        std::vector<float> contextSignal;
-        std::vector<std::vector<float>> negativeSignals(negativeErrors.size());
+        std::vector<float> centreSignal(contextEmbedding.size());
+        std::vector<float> contextSignal(centreEmbedding.size());
+        std::vector<std::vector<float>> negativeSignals(negativeIndices.size());
 
+        for (auto& i : negativeSignals) {
 
-        for (const auto& i : contextEmbedding) {
-
-            centreSignal.push_back((positiveError - 1) * i);
+            i.resize(centreEmbedding.size());
         }
 
-        for (const auto& i : centreEmbedding) {
 
-            contextSignal.push_back((positiveError - 1) * i);
+        for (int i = 0; i < contextEmbedding.size(); i++) {
+
+            centreSignal[i] = (positiveError - 1) * contextEmbedding[i];
+        }
+
+        for (int i = 0; i < negativeIndices.size(); i++) {
+            for (int j = 0; j < embeddings[negativeIndices[i]].size(); j++) {
+
+                centreSignal[j] += (1 - negativeErrors[i]) * embeddings[negativeIndices[i]][j];
+            }
+        }
+
+        for (int i = 0; i < centreEmbedding.size(); i++) {
+
+            contextSignal[i] = (positiveError - 1) * centreEmbedding[i];
+        }
+
+
+        for (int i = 0; i < negativeIndices.size(); i++) {
+
+            for (int j = 0; j < centreEmbedding.size(); j++) {
+
+                negativeSignals[i][j] = (1 - negativeErrors[i]) * centreEmbedding[j];
+            }
+
+            for (int j = 0; j < embeddings[negativeIndices[i]].size(); j++) {
+
+                embeddings[negativeIndices[i]][j] -= negativeSignals[i][j] * learningRate;
+            }
         }
 
         for (int i = 0; i < centreEmbedding.size(); i++) {
@@ -309,19 +336,6 @@ public:
         for (int i = 0; i < contextEmbedding.size(); i++) {
 
             contextEmbedding[i] -= contextSignal[i] * learningRate;
-        }
-
-        for (int i = 0; i < negativeEmbeddings.size(); i++) {
-
-            for (const auto& j : negativeEmbeddings[i]) {
-
-                negativeSignals[i].push_back(negativeErrors[i] * j);
-            }
-
-            for (int j = 0; j < negativeEmbeddings[i].size(); j++) {
-
-                negativeEmbeddings[i][j] -= negativeSignals[i][j] * learningRate;
-            }
         }
     }
 
@@ -342,11 +356,11 @@ public:
 
         constexpr int dimension = 512;
 
-        constexpr int windowSize = 8;
+        constexpr int windowSize = 5;
 
-        constexpr float learningRate = 0.025f;
+        constexpr float learningRate = 0.05f;
 
-        constexpr int negativeSamplesCount = 10;
+        constexpr int negativeSamplesCount = 5;
 
 
 
@@ -401,16 +415,19 @@ public:
 
         std::uniform_int_distribution dist(0, static_cast<int>(vocabulary.size() - 1));
 
+        float average_loss = 0;
 
-        for (int v = 0; v < 1000; v++) {
 
-            loadWords(words, corpusFile);
+        size_t iterations = 0;
+
+
+        while (loadWords(words, corpusFile)) {
 
             std::vector<int> tokenizedWords;
 
             float positiveError;
 
-            std::vector<float> negativeErrors;
+            std::vector<float> negativeErrors(negativeSamplesCount);
 
             std::vector<int> negativeSamplesIndices;
 
@@ -428,28 +445,24 @@ public:
                     }
 
 
-                    std::vector<float> centreEmbedding = embeddings[tokenizedWords[i]];
+                    std::vector<float> &centreEmbedding = embeddings[tokenizedWords[i]];
 
-                    std::vector<float> contextEmbedding = embeddings[tokenizedWords[j]];
+                    std::vector<float> &contextEmbedding = embeddings[tokenizedWords[j]];
 
-                    std::vector<std::vector<float>> negativeEmbeddings;
-
-                    std::vector<int> negativeIndices;
+                    std::vector<int> negativeIndices(negativeSamplesCount);
 
                     for (int k = 0; k < negativeSamplesCount; k++) {
 
-                        int index = dist(rng);
-
-                        negativeEmbeddings.push_back(embeddings[index]);
-                        negativeIndices.push_back(index);
+                        negativeIndices[k] = dist(rng);
                     }
 
                     forwardPass(
                         positiveError,
                         negativeErrors,
-                        centreEmbedding,
+                        embeddings[tokenizedWords[i]],
                         contextEmbedding,
-                        negativeEmbeddings);
+                        negativeIndices,
+                        embeddings);
 
 
                     float loss = -std::log(positiveError);
@@ -459,26 +472,30 @@ public:
                         loss += -std::log(k);
                     }
 
-                    //std::cout << positiveError << "\n";
 
                     //std::cout << loss << "\n";
 
-                    backpropagation(centreEmbedding, contextEmbedding, learningRate, negativeIndices, negativeEmbeddings, positiveError, negativeErrors);
+                    average_loss += loss;
 
-                    embeddings[tokenizedWords[i]] = centreEmbedding;
+                    iterations++;
 
-                    embeddings[tokenizedWords[j]] = contextEmbedding;
+                    backpropagation(
+                        embeddings[tokenizedWords[i]],
+                        contextEmbedding,
+                        learningRate,
+                        negativeIndices,
+                        embeddings,
+                        positiveError,
+                        negativeErrors);
 
-                    for (int k = 0; k < negativeSamplesCount; k++) {
 
-                        embeddings[negativeIndices[k]] = negativeEmbeddings[k];
-                    }
 
                     negativeErrors.clear();
                 }
             }
-        }
 
+            std::cout << "\n" << average_loss / iterations << "\n";
+        }
 
         std::ofstream embeddingsFileOut2("../output/embeddings.bin", std::ios::binary);
 

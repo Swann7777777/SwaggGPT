@@ -4,9 +4,9 @@
 
 int main() {
 
-    embedding::embed();
+    //tokenizer::tokenize();
 
-
+    tokenizer::tokenize();
 
     return 0;
 

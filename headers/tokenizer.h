@@ -277,25 +277,15 @@ public:
         }
     }
 
-    static void outputVocabulary(std::unordered_map<std::pair<int, int>, int, pairHash> &pairs, std::ofstream &vocabularyFileOut, std::vector<std::string> &vocabulary, trieNode* root) {
+    static void outputVocabulary(
+        std::ofstream &vocabularyFileOut,
+        std::vector<std::string> &vocabulary) {
 
-        std::pair<std::pair<int, int>, int> max = {{0, 0}, 0};
 
-        for (const auto& [pair, count] : pairs) {
+        for (const auto& i : vocabulary) {
 
-            if (count > max.second) {
-
-                max = {pair, count};
-            }
+            vocabularyFileOut << "\n" << i;
         }
-
-        std::cout << vocabulary[max.first.first] + vocabulary[max.first.second] << " : " << max.second << "\n";
-
-        vocabularyFileOut << "\n" << vocabulary[max.first.first] + vocabulary[max.first.second];
-
-        insertTrie(vocabulary[max.first.first] + vocabulary[max.first.second], root, vocabulary.size());
-
-        vocabulary.push_back(vocabulary[max.first.first] + vocabulary[max.first.second]);
     }
 
 
@@ -323,7 +313,6 @@ public:
 
         loadWords(words, corpusFile);
 
-        std::ofstream vocabularyFileOut("../output/vocabulary.txt", std::ios::app);
 
         std::unordered_map<std::vector<int>, int, vectorHash> tokenizedWords;
 
@@ -364,13 +353,36 @@ public:
                 createPairs(tokenizedWord, count, pairs);
             }
 
-            outputVocabulary(pairs, vocabularyFileOut, vocabulary, root);
+
+            std::pair<std::pair<int, int>, int> max = {{0, 0}, 0};
+
+            for (const auto& [pair, count] : pairs) {
+
+                if (count > max.second) {
+
+                    max = {pair, count};
+                }
+            }
+
+            std::cout << vocabulary[max.first.first] + vocabulary[max.first.second] << " : " << max.second << "\n";
+
+
+            insertTrie(vocabulary[max.first.first] + vocabulary[max.first.second], root, vocabulary.size());
+
+            vocabulary.push_back(vocabulary[max.first.first] + vocabulary[max.first.second]);
+
 
             pairs.clear();
 
 
             std::cout << static_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start) << "\n";
         }
+
+        std::ofstream vocabularyFileOut("../output/vocabulary.txt");
+
+        outputVocabulary(vocabularyFileOut, vocabulary);
+
+        vocabularyFileOut.close();
     }
 };
 
