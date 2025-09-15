@@ -220,8 +220,7 @@ public:
 
 
     static std::vector<int> tokenizeWord(const std::string &word,
-        const trieNode* root,
-        std::unordered_map<std::string, std::vector<int>> &wordToToken) {
+        const trieNode* root) {
 
         const trieNode* node = root;
 
@@ -256,11 +255,7 @@ public:
 
         tempTokens.push_back(token);
 
-        if (tempTokens.size() > 1) {
-
-            wordToToken[word] = tempTokens;
-            return tempTokens;
-        }
+        return tempTokens;
     }
 
 
@@ -322,58 +317,78 @@ public:
 
         pairs.reserve(10000000);
 
-        std::unordered_map<std::string, std::vector<int>> wordToToken;
-
-        wordToToken.reserve(tokenizedWords.size());
-
-
 
 
         for (const auto& [word, count] : words) {
-
-            tokenizedWords[tokenizeWord(word, root, wordToToken)] = count;
+            if (std::vector<int> tokens = tokenizeWord(word, root); tokens.size() > 1) {
+                tokenizedWords[tokens] = count;
+            }
         }
+
+        std::pair<std::pair<int, int>, int> max = {{0, 0}, 0};
+
 
         for (int i = 0; i < 1000; i++) {
 
-            auto start = std::chrono::high_resolution_clock::now();
+            std::vector<std::vector<int>> tmp;
 
-            for (const auto& [word, count] : words) {
 
-                if (word.find(vocabulary.back()) != std::string::npos) {
+            for (auto& [word, count] : tokenizedWords) {
 
-                    tokenizedWords.erase(wordToToken[word]);
+                std::vector<int> newWord;
 
-                    tokenizedWords[tokenizeWord(word, root, wordToToken)] = count;
+                if (word.size() < 2) {
+                    continue;
+                }
+
+                for (int j = 0; j < word.size() - 1; j++) {
+                    if (word[j] == max.first.first && word[j + 1] == max.first.second) {
+
+                        newWord = word;
+
+                        for (int k = 0; k < 2; k++) {
+                            newWord.erase(newWord.begin() + j);
+                        }
+
+                        newWord.insert(newWord.begin() + j, vocabulary.size() - 1);
+                    }
+                }
+
+                if (!newWord.empty()) {
+                    tmp.push_back(word);
+                    tokenizedWords[newWord] = count;
                 }
             }
+
+            for (const auto& j : tmp) {
+                tokenizedWords.erase(j);
+            }
+
+            max = {{0, 0}, 0};
+
+
+
+            auto start = std::chrono::high_resolution_clock::now();
+
+            pairs.clear();
 
             for (const auto& [tokenizedWord, count] : tokenizedWords) {
 
                 createPairs(tokenizedWord, count, pairs);
             }
 
-
-            std::pair<std::pair<int, int>, int> max = {{0, 0}, 0};
-
             for (const auto& [pair, count] : pairs) {
-
                 if (count > max.second) {
-
                     max = {pair, count};
                 }
             }
-
-            std::cout << vocabulary[max.first.first] + vocabulary[max.first.second] << " : " << max.second << "\n";
-
 
             insertTrie(vocabulary[max.first.first] + vocabulary[max.first.second], root, vocabulary.size());
 
             vocabulary.push_back(vocabulary[max.first.first] + vocabulary[max.first.second]);
 
 
-            pairs.clear();
-
+            std::cout << vocabulary[max.first.first] + vocabulary[max.first.second] << " : " << max.second << "\n";
 
             std::cout << static_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start) << "\n";
         }
