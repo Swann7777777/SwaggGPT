@@ -259,6 +259,49 @@ public:
     }
 
 
+    static std::vector<int> reTokenizeWord(const std::vector<int> &word, const std::pair<std::pair<int, int>, int> &max, const std::vector<std::string> &vocabulary) {
+
+        std::vector<int> newWord;
+
+        if (word.size() < 2) {
+            return {};
+        }
+
+        for (int j = 0; j < word.size() - 1; j++) {
+            if (word[j] == max.first.first && word[j + 1] == max.first.second) {
+
+                newWord = word;
+
+                for (int k = 0; k < 2; k++) {
+                    newWord.erase(newWord.begin() + j);
+                }
+
+                newWord.insert(newWord.begin() + j, vocabulary.size() - 1);
+            }
+        }
+
+        return newWord;
+    }
+
+
+
+    static void reCreatePairs(std::unordered_map<std::pair<int, int>, int, pairHash> &pairs, const std::vector<int> &oldWord, const std::vector<int> &newWord, int count) {
+
+
+        for (int i = 0; i < oldWord.size() - 1; i++) {
+            pairs[{oldWord[i], oldWord[i + 1]}] -= count;
+            if (pairs[{oldWord[i], oldWord[i + 1]}] <= 0) {
+                pairs.erase({oldWord[i], oldWord[i + 1]});
+            }
+        }
+
+        for (int i = 0; i < newWord.size() - 1; i++) {
+
+            pairs[{newWord[i], newWord[i + 1]}] += count;
+        }
+    }
+
+
 
 
     static void createPairs(const std::vector<int> &tokenizedWord,
@@ -325,57 +368,46 @@ public:
             }
         }
 
+        for (const auto& [tokenizedWord, count] : tokenizedWords) {
+
+            createPairs(tokenizedWord, count, pairs);
+        }
+
         std::pair<std::pair<int, int>, int> max = {{0, 0}, 0};
 
 
-        for (int i = 0; i < 1000; i++) {
+        while (vocabulary.size() <= 30000) {
 
-            std::vector<std::vector<int>> tmp;
+            auto start = std::chrono::high_resolution_clock::now();
+
+            std::vector<std::vector<int>> tmpWords;
+
+            std::vector<std::pair<std::pair<std::vector<int>, std::vector<int>>, int>> tmpPairs;
 
 
             for (auto& [word, count] : tokenizedWords) {
 
-                std::vector<int> newWord;
-
-                if (word.size() < 2) {
-                    continue;
-                }
-
-                for (int j = 0; j < word.size() - 1; j++) {
-                    if (word[j] == max.first.first && word[j + 1] == max.first.second) {
-
-                        newWord = word;
-
-                        for (int k = 0; k < 2; k++) {
-                            newWord.erase(newWord.begin() + j);
-                        }
-
-                        newWord.insert(newWord.begin() + j, vocabulary.size() - 1);
-                    }
-                }
-
-                if (!newWord.empty()) {
-                    tmp.push_back(word);
+                if (std::vector<int> newWord = reTokenizeWord(word, max, vocabulary); !newWord.empty()) {
+                    tmpWords.push_back(word);
                     tokenizedWords[newWord] = count;
+
+                    tmpPairs.push_back({{word, newWord}, count});
                 }
             }
 
-            for (const auto& j : tmp) {
+            for (const auto& j : tmpWords) {
                 tokenizedWords.erase(j);
             }
 
             max = {{0, 0}, 0};
 
 
+            for (const auto&[word, count] : tmpPairs) {
 
-            auto start = std::chrono::high_resolution_clock::now();
-
-            pairs.clear();
-
-            for (const auto& [tokenizedWord, count] : tokenizedWords) {
-
-                createPairs(tokenizedWord, count, pairs);
+                reCreatePairs(pairs, word.first, word.second, count);
             }
+
+
 
             for (const auto& [pair, count] : pairs) {
                 if (count > max.second) {
