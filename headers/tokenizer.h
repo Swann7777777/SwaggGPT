@@ -320,16 +320,18 @@ public:
         std::vector<std::string> &vocabulary) {
 
 
-        for (const auto& i : vocabulary) {
+        for (int i = 0; i < vocabulary.size(); i++) {
 
-            vocabularyFileOut << "\n" << i;
+            vocabularyFileOut << vocabulary[i];
+
+            if (i != vocabulary.size() - 1) {
+                vocabularyFileOut << "\n";
+            }
         }
     }
 
 
     static void tokenize() {
-
-        std::vector<std::thread> threads;
 
         std::vector<std::string> vocabulary;
 
@@ -376,7 +378,7 @@ public:
         std::pair<std::pair<int, int>, int> max = {{0, 0}, 0};
 
 
-        while (vocabulary.size() <= 30000) {
+        while (vocabulary.size() < 30000) {
 
             auto start = std::chrono::high_resolution_clock::now();
 

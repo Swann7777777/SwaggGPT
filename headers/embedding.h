@@ -213,7 +213,7 @@ public:
 
     static void generateEmbeddings(std::ofstream &embeddingsFileOut, const int &dimension, const int &size, std::mt19937 rng) {
 
-        std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
         std::vector<std::vector<float>> embeddings(size);
 
@@ -358,7 +358,7 @@ public:
 
         constexpr int windowSize = 5;
 
-        constexpr float learningRate = 0.05f;
+        constexpr float learningRate = 0.0005f;
 
         constexpr int negativeSamplesCount = 5;
 
@@ -387,11 +387,11 @@ public:
 
 
 
-        std::ofstream embeddingsFileOut("../output/embeddings.bin", std::ios::binary);
-
-        generateEmbeddings(embeddingsFileOut, dimension, static_cast<int>(vocabulary.size()), rng);
-
-        embeddingsFileOut.close();
+        // std::ofstream embeddingsFileOut("../output/embeddings.bin", std::ios::binary);
+        //
+        // generateEmbeddings(embeddingsFileOut, dimension, static_cast<int>(vocabulary.size()), rng);
+        //
+        // embeddingsFileOut.close();
 
 
 
@@ -405,9 +405,6 @@ public:
 
 
 
-        //while (true) {
-        //}
-
 
         std::vector<std::string> words;
 
@@ -415,13 +412,13 @@ public:
 
         std::uniform_int_distribution dist(0, static_cast<int>(vocabulary.size() - 1));
 
-        float average_loss = 0;
+        std::ofstream lossesFile("../output/losses.csv");
 
 
-        size_t iterations = 0;
 
+        for (int v = 0; v < 10000; v++) {
 
-        while (loadWords(words, corpusFile)) {
+            loadWords(words, corpusFile);
 
             std::vector<int> tokenizedWords;
 
@@ -434,6 +431,11 @@ public:
             tokenizeWords(words, root, tokenizedWords);
 
             words.clear();
+
+            float average_loss = 0;
+
+
+            size_t iterations = 0;
 
 
             for (int i = 0; i < tokenizedWords.size(); i++) {
@@ -459,7 +461,7 @@ public:
                     forwardPass(
                         positiveError,
                         negativeErrors,
-                        embeddings[tokenizedWords[i]],
+                        centreEmbedding,
                         contextEmbedding,
                         negativeIndices,
                         embeddings);
@@ -472,15 +474,12 @@ public:
                         loss += -std::log(k);
                     }
 
-
-                    //std::cout << loss << "\n";
-
                     average_loss += loss;
 
                     iterations++;
 
                     backpropagation(
-                        embeddings[tokenizedWords[i]],
+                        centreEmbedding,
                         contextEmbedding,
                         learningRate,
                         negativeIndices,
@@ -494,12 +493,13 @@ public:
                 }
             }
 
-            std::cout << "\n" << average_loss / iterations << "\n";
+            lossesFile << average_loss / iterations<< "\n";
         }
 
         std::ofstream embeddingsFileOut2("../output/embeddings.bin", std::ios::binary);
 
         outputEmbeddings(embeddings, embeddingsFileOut2);
+
 
         embeddingsFileOut2.close();
     }
